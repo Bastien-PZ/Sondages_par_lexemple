@@ -281,6 +281,8 @@ viewof choix_repartition_points = Inputs.select(
 
 ## <span style="font-size:36px;">Simulation de tirages personnalisés</span>
 
+<span style="font-size:18px;"> >> Cliquez sur la grille pour sélectionner les cases à échantillonner. Vous pouvez maintenir le clic pour sélectionner plusieurs cases à la fois.</span>
+
 <div style="display:flex; gap:40px; align-items:flex-start; font-family:sans-serif;">
   <div>
 
@@ -848,6 +850,8 @@ viewof choix_repartition_points3 = Inputs.select(
 
 
 ## <span style="font-size:36px;">Simulation de tirages personnalisés à plusieurs classes</span> 
+
+<span style="font-size:18px;"> >> Cliquez sur la grille pour sélectionner les cases à échantillonner. Vous pouvez maintenir le clic pour sélectionner plusieurs cases à la fois.</span>
 
 <div style="display:flex; gap:50px; align-items:flex-start; font-family:sans-serif;">
   <div>
