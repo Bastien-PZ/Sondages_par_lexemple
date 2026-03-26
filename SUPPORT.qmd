@@ -1,0 +1,1154 @@
+---
+title: "Sondages par l'exemple"
+author: Bastien PERRIN-ZEN & François SEMECURBE
+date: "2026.06.25"
+format: 
+  revealjs: 
+    self-contained: true
+---
+
+## <span style="font-size:36px;">Introduction à l'atelier</span>
+
+
+
+## <span style="font-size:36px;">Simulation de tirages aléatoires</span>
+
+<div style="display:flex; gap:40px; align-items:flex-start; font-family:sans-serif;">
+  <div>
+
+  <!-- Colonne gauche : sliders -->
+<span style="font-size:18px;font-weight:bold">Paramètres :</span><br>
+<span style="font-size:18px;font-style:italic">Taille de la grille :</span>
+```{ojs}
+viewof gridSize = (() => {
+  const slider = Inputs.range([5, 100], {value: 20, step: 1})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de points :</span>
+```{ojs}
+viewof numPoints = (() => {
+  const slider = Inputs.range([10, 5000], {value: 500, step: 10})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de cases sélectionnées :</span>
+```{ojs}
+viewof k = (() => {
+  const slider = Inputs.range([1, gridSize * gridSize], {value: 60, step: 1})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+--------------------------
+
+<span style="font-size:18px;font-style:italic">Choix de la répartition des points :</span>
+```{ojs}
+viewof choix_repartition_points = Inputs.select(
+  [
+    "Uniforme",
+    "Ondulations croisées régulières",
+    "Ondulations croisées irrégulières",
+    "Ondulations sinusoïdales",
+    "Concentration centrale",
+    "Motif en cercles concentriques ou anneaux"
+  ],
+  { value: "Uniforme"}
+)
+```
+
+<style>
+  select, select option {
+    font-size: 20px !important;   /* taille des options */
+  }
+</style>
+  </div>
+
+  <!-- Colonne droite : grille -->
+  <div id="grid-container">
+```{ojs}
+{
+  const totalCells = gridSize * gridSize
+
+  // -------------------
+  // POINTS
+  // -------------------
+  const points = []
+
+  // définir density selon le choix
+  let density = null
+  if (choix_repartition_points === "Ondulations croisées régulières") {
+    density = (x, y) => Math.abs(Math.sin(x * 0.5) * Math.cos(y * 0.5) + Math.sin(x * 0.2 + y * 0.3))
+  } else if (choix_repartition_points === "Ondulations croisées irrégulières") {
+    density = (x, y) => Math.cos(x * 0.3) * Math.sin(y * 0.7) + Math.cos(x * 0.1 + y * 0.2)
+  } else if (choix_repartition_points === "Ondulations sinusoïdales") {
+    density = (x, y) => Math.abs(Math.sin(x * 0.5) * Math.cos(y * 0.5) + Math.sin(x * 0.2 + y * 0.3))
+  } else if (choix_repartition_points === "Concentration centrale") {
+    density = (x, y) => {
+      const cx = gridSize / 2
+      const cy = gridSize / 2
+      const sigma = gridSize / 5
+      // densité plus élevée vers le centre
+      return Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * sigma ** 2))
+    }
+  } else if (choix_repartition_points === "Motif en cercles concentriques ou anneaux") {
+    density = (x, y) => {
+      const cx = gridSize / 2
+      const cy = gridSize / 2
+      const r = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+      // anneaux concentriques avec densité variable
+      return 0.5 + 0.5 * Math.sin(r * 0.5)
+    }
+  }
+
+  // si choix uniforme, on ignore density et on fait simple
+  if (choix_repartition_points === "Uniforme") {
+    for (let i = 0; i < numPoints; i++) {
+      points.push({
+        x: Math.random() * gridSize,
+        y: Math.random() * gridSize
+      })
+    }
+  } else {
+    // boucle commune pour B ou C (ou d'autres) utilisant density
+    while (points.length < numPoints) {
+      const x = Math.random() * gridSize
+      const y = Math.random() * gridSize
+
+      const d = density(x, y)
+
+      if (Math.random() < d / 2) {
+        points.push({ x, y })
+      }
+    }
+  }
+
+
+  // -------------------
+  // CASES SÉLECTIONNÉES
+  // -------------------
+  const selectedCells = new Set()
+
+  while (selectedCells.size < k) {
+    const x = Math.floor(Math.random() * gridSize)
+    const y = Math.floor(Math.random() * gridSize)
+    selectedCells.add(`${x},${y}`)
+  }
+
+  // -------------------
+  // TEST
+  // -------------------
+  function isSelected(p) {
+    const x = Math.floor(p.x)
+    const y = Math.floor(p.y)
+    return selectedCells.has(`${x},${y}`)
+  }
+
+  // -------------------
+  // COMPTER
+  // -------------------
+  const captured = points.filter(isSelected).length
+
+  // -------------------
+  // ESTIMATION
+  // -------------------
+  const estimatedTotal = (captured / k) * totalCells
+
+  // erreur
+  const error = Math.abs(estimatedTotal - numPoints)
+
+  // -------------------
+  // SVG
+  // -------------------
+  const svgNS = "http://www.w3.org/2000/svg"
+  const svg = document.createElementNS(svgNS, "svg")
+
+  svg.setAttribute("viewBox", `0 0 ${gridSize} ${gridSize}`)
+  svg.setAttribute("width", 500)
+  svg.setAttribute("height", 500)
+  svg.style.border = "1px solid black"
+
+  // grille
+  for (let i = 0; i <= gridSize; i++) {
+    const h = document.createElementNS(svgNS, "line")
+    h.setAttribute("x1", 0)
+    h.setAttribute("y1", i)
+    h.setAttribute("x2", gridSize)
+    h.setAttribute("y2", i)
+    h.setAttribute("stroke", "#888")
+    h.setAttribute("stroke-width", 0.02)
+    svg.appendChild(h)
+
+    const v = document.createElementNS(svgNS, "line")
+    v.setAttribute("x1", i)
+    v.setAttribute("y1", 0)
+    v.setAttribute("x2", i)
+    v.setAttribute("y2", gridSize)
+    v.setAttribute("stroke", "#888")
+    v.setAttribute("stroke-width", 0.02)
+    svg.appendChild(v)
+  }
+
+  // cases
+  for (const cell of selectedCells) {
+    const [x, y] = cell.split(",").map(Number)
+
+    const rect = document.createElementNS(svgNS, "rect")
+    rect.setAttribute("x", x)
+    rect.setAttribute("y", y)
+    rect.setAttribute("width", 1)
+    rect.setAttribute("height", 1)
+    rect.setAttribute("fill", "blue")
+    rect.setAttribute("opacity", 0.5)
+
+    svg.appendChild(rect)
+  }
+
+  // points
+  for (const p of points) {
+    const c = document.createElementNS(svgNS, "circle")
+    c.setAttribute("cx", p.x)
+    c.setAttribute("cy", p.y)
+    c.setAttribute("r", 0.1)
+    c.setAttribute("fill", isSelected(p) ? "red" : "black")
+    svg.appendChild(c)
+  }
+
+  // -------------------
+  // UI
+  // -------------------
+  // Container principal : disposition horizontale
+  const container = document.createElement("div")
+  container.style.display = "flex"
+  container.style.flexDirection = "row"
+  container.style.gap = "20px"
+  container.style.fontFamily = "sans-serif"
+  container.style.fontSize = "12px"
+  container.style.lineHeight = "1.4"
+  
+  // Colonne gauche : texte
+  const textCol = document.createElement("div")
+  textCol.style.flex = "1"           
+  textCol.style.minWidth = "200px"   
+  textCol.style.display = "flex"
+  textCol.style.flexDirection = "column"
+  textCol.style.gap = "10px"
+  
+  // Texte indicateurs
+  const text = document.createElement("div")
+  text.style.fontSize = "12px"       
+  text.style.margin = "10px 0"
+  
+  const errorPercent = Math.abs(estimatedTotal - numPoints) / numPoints * 100
+  
+  text.innerHTML = `
+    <br><br>
+    <b>Points capturés :</b> ${captured} / ${numPoints}<br>
+    <b>Estimation population :</b> ${Math.round(estimatedTotal)}<br>
+    <b>Vraie population :</b> ${numPoints}<br>
+    <b>Erreur :</b> ${errorPercent.toFixed(2)} %
+  `
+  
+  textCol.appendChild(text)
+  
+  // Colonne droite : la grille (SVG)
+  const svgCol = document.createElement("div")
+  svgCol.style.flexShrink = "0"      // empêche le SVG de rétrécir
+  svgCol.appendChild(svg)
+  
+  // Ajout des colonnes au container
+  container.appendChild(textCol)
+  container.appendChild(svgCol)
+  
+  return container
+}
+```
+  </div>
+</div>
+
+
+<!-- /////////////////////////////////////////////////////////////////////// -->
+<!-- //////////////////////////////////////////////////////////////////////  -->
+
+
+## <span style="font-size:36px;">Simulation de tirages personnalisés</span>
+
+<div style="display:flex; gap:40px; align-items:flex-start; font-family:sans-serif;">
+  <div>
+
+  <!-- Colonne gauche : sliders -->
+<span style="font-size:18px;font-weight:bold">Paramètres :</span><br>
+<span style="font-size:18px;font-style:italic">Taille de la grille :</span>
+```{ojs}
+viewof gridSize2 = (() => {
+  const slider = Inputs.range([5, 100], {value: 20, step: 1})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de points :</span>
+```{ojs}
+viewof numPoints2 = (() => {
+  const slider = Inputs.range([10, 5000], {value: 500, step: 10})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de cases sélectionnées :</span>
+```{ojs}
+viewof k2 = (() => {
+  const slider = Inputs.range([1, gridSize2 * gridSize2], {value: 60, step: 1})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+-------------------------
+
+<span style="font-size:18px;font-style:italic">Choix de la répartition des points :</span>
+```{ojs}
+viewof choix_repartition_points2 = Inputs.select(
+  [
+    "Uniforme",
+    "Ondulations croisées régulières",
+    "Ondulations croisées irrégulières",
+    "Ondulations sinusoïdales",
+    "Concentration centrale",
+    "Motif en cercles concentriques ou anneaux"
+  ],
+  { value: "Uniforme"}
+)
+```
+
+<style>
+  select, select option {
+    font-size: 20px !important;   /* taille des options */
+  }
+</style>
+
+  </div>
+
+  <!-- Colonne droite : grille -->
+  <div id="grid-container">
+
+```{ojs}
+mutable selectedCells = new Set()
+```
+
+```{ojs}
+mutable points = (function() {
+  const points = []
+
+  // définir density selon le choix
+  let density = null
+  if (choix_repartition_points2 === "Ondulations croisées régulières") {
+    density = (x, y) => Math.abs(Math.sin(x * 0.5) * Math.cos(y * 0.5) + Math.sin(x * 0.2 + y * 0.3))
+  } else if (choix_repartition_points2 === "Ondulations croisées irrégulières") {
+    density = (x, y) => Math.cos(x * 0.3) * Math.sin(y * 0.7) + Math.cos(x * 0.1 + y * 0.2)
+  } else if (choix_repartition_points2 === "Ondulations sinusoïdales") {
+    density = (x, y) => Math.abs(Math.sin(x * 0.5) * Math.cos(y * 0.5) + Math.sin(x * 0.2 + y * 0.3))
+  } else if (choix_repartition_points2 === "Concentration centrale") {
+    density = (x, y) => {
+      const cx = gridSize2 / 2
+      const cy = gridSize2 / 2
+      const sigma = gridSize2 / 5
+      // densité plus élevée vers le centre
+      return Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * sigma ** 2))
+    }
+  } else if (choix_repartition_points2 === "Motif en cercles concentriques ou anneaux") {
+    density = (x, y) => {
+      const cx = gridSize2 / 2
+      const cy = gridSize2 / 2
+      const r = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+      // anneaux concentriques avec densité variable
+      return 0.5 + 0.5 * Math.sin(r * 0.5)
+    }
+  }
+
+  // si choix uniforme, on ignore density et on fait simple
+  if (choix_repartition_points2 === "Uniforme") {
+    for (let i = 0; i < numPoints2; i++) {
+      points.push({
+        x: Math.random() * gridSize2,
+        y: Math.random() * gridSize2
+      })
+    }
+  } else {
+    // boucle commune pour B ou C (ou d'autres) utilisant density
+    while (points.length < numPoints2) {
+      const x = Math.random() * gridSize2
+      const y = Math.random() * gridSize2
+
+      const d = density(x, y)
+
+      if (Math.random() < d / 2) {
+        points.push({ x, y })
+      }
+    }
+  }
+  return points
+})()
+```
+
+```{ojs}
+{
+  const svgNS = "http://www.w3.org/2000/svg"
+  const svg = document.createElementNS(svgNS, "svg")
+  svg.setAttribute("viewBox", `0 0 ${gridSize2} ${gridSize2}`)
+  svg.setAttribute("width", 500)
+  svg.setAttribute("height", 500)
+  svg.style.border = "1px solid black"
+  svg.style.cursor = "crosshair"
+
+  let dragging =false
+  let addMode = true
+
+  function processCell(x, y) {
+    const key = `${x},${y}`
+    const next = new Set(mutable selectedCells)
+    if (next.has(key)) {
+      if (!addMode) next.delete(key)
+    } else {
+      if (addMode) {
+        if (next.size >= k2) {
+          const first = next.values().next().value
+          next.delete(first)
+        }
+        next.add(key)
+      }
+    }
+    mutable selectedCells = next
+    updateDisplay()
+  }
+
+  function getMouseCell(e) {
+    const rect = svg.getBoundingClientRect()
+    const x = Math.floor((e.clientX - rect.left) / rect.width * gridSize2)
+    const y = Math.floor((e.clientY - rect.top) / rect.height * gridSize2)
+    return [x, y]
+  }
+
+  svg.addEventListener("mousedown", e => {
+    dragging = true
+    const [x, y] = getMouseCell(e)
+    addMode = !mutable selectedCells.has(`${x},${y}`)
+    processCell(x, y)
+  })
+
+  svg.addEventListener("mousemove", e => {
+    if (!dragging) return
+    const [x, y] = getMouseCell(e)
+    processCell(x, y)
+  })
+
+  svg.addEventListener("mouseup", () => { dragging = false })
+  svg.addEventListener("mouseleave", () => { dragging = false })
+
+  // Grille + cases + points
+  const gridLines = []
+  const caseRects = []
+  const pointCircles = []
+
+  for (let i = 0; i <= gridSize2; i++) {
+    const h = document.createElementNS(svgNS, "line")
+    h.setAttribute("x1", 0); h.setAttribute("y1", i)
+    h.setAttribute("x2", gridSize2); h.setAttribute("y2", i)
+    h.setAttribute("stroke", "#555"); h.setAttribute("stroke-width", 0.05)
+    svg.appendChild(h)
+    gridLines.push(h)
+
+    const v = document.createElementNS(svgNS, "line")
+    v.setAttribute("x1", i); v.setAttribute("y1", 0)
+    v.setAttribute("x2", i); v.setAttribute("y2", gridSize2)
+    v.setAttribute("stroke", "#555"); v.setAttribute("stroke-width", 0.05)
+    svg.appendChild(v)
+    gridLines.push(v)
+  }
+
+  for (const p of mutable points) {
+    const c = document.createElementNS(svgNS, "circle")
+    c.setAttribute("cx", p.x); c.setAttribute("cy", p.y)
+    c.setAttribute("r", 0.1)
+    c.setAttribute("fill", "black")
+    svg.appendChild(c)
+    pointCircles.push(c)
+  }
+
+  function updateDisplay() {
+    // Cases
+    caseRects.forEach(r => svg.removeChild(r))
+    caseRects.length = 0
+    for (const cell of mutable selectedCells) {
+      const [x, y] = cell.split(",").map(Number)
+      const rect = document.createElementNS(svgNS, "rect")
+      rect.setAttribute("x", x); rect.setAttribute("y", y)
+      rect.setAttribute("width", 1); rect.setAttribute("height", 1)
+      rect.setAttribute("fill", "blue"); rect.setAttribute("opacity", 0.5)
+      svg.appendChild(rect)
+      caseRects.push(rect)
+    }
+
+    // Points color
+    for (let i = 0; i < mutable points.length; i++) {
+      const p = mutable points[i]
+      pointCircles[i].setAttribute(
+        "fill",
+        mutable selectedCells.has(`${Math.floor(p.x)},${Math.floor(p.y)}`) ? "red" : "black"
+      )
+    }
+
+    // Stats
+    const captured = mutable points.filter(p => mutable selectedCells.has(`${Math.floor(p.x)},${Math.floor(p.y)}`)).length
+    const estimatedTotal = (captured / Math.max(1, mutable selectedCells.size)) * (gridSize2*gridSize2)
+    const errorPercent = Math.abs(estimatedTotal - numPoints2) / numPoints2 * 100
+    estimatedDiv.innerHTML = `
+      <br><br>
+      <b>Cases sélectionnées :</b> ${mutable selectedCells.size} / ${k2}<br>
+      <b>Points capturés :</b> ${captured} / ${numPoints2}<br>
+      <b>Estimation :</b> ${Math.round((captured / Math.max(1, mutable selectedCells.size)) * (gridSize2*gridSize2))}<br>
+      <b>Vraie population :</b> ${numPoints2}<br>
+      <b>Erreur :</b> ${errorPercent.toFixed(2)} %
+    `
+  }
+
+  // Colonne gauche : texte + bouton
+  const leftCol = document.createElement("div")
+  leftCol.style.display = "flex"
+  leftCol.style.flexDirection = "column"
+  leftCol.style.gap = "10px"
+  leftCol.style.alignItems = "flex-start"
+  leftCol.style.flex = "1"        
+  leftCol.style.minWidth = "200px" 
+  
+  const container = document.createElement("div")
+  container.style.display = "flex"   // layout horizontal
+  container.style.flexDirection = "row"
+  container.style.gap = "20px"
+  container.style.fontFamily = "sans-serif"
+  container.style.fontSize = "12px"
+  container.style.lineHeight = "1.4"
+  
+  // Div pour les indicateurs
+  const estimatedDiv = document.createElement("div")
+  estimatedDiv.style.margin = "10px 0"
+  
+  const resetBtn = document.createElement("button")
+  resetBtn.textContent = "Reset"
+  resetBtn.onclick = () => {
+    mutable selectedCells = new Set()
+    updateDisplay()
+  }
+  
+  // Ajout des éléments à la colonne gauche
+  leftCol.appendChild(estimatedDiv)
+  leftCol.appendChild(resetBtn)
+  
+  // Colonne droite : la grille (SVG)
+  const rightCol = document.createElement("div")
+  rightCol.style.flexShrink = "0"   // empêche la grille de rétrécir
+  rightCol.appendChild(svg)
+  
+  // Ajout des deux colonnes au container
+  container.appendChild(leftCol)
+  container.appendChild(rightCol)
+  
+  updateDisplay() // affichage initial
+  
+  return container
+}
+```
+
+  </div>
+</div>
+
+
+<!-- /////////////////////////////////////////////////////////////////////// -->
+<!-- //////////////////////////////////////////////////////////////////////  -->
+
+
+## <span style="font-size:36px;">Simulation de tirages aléatoires à plusieurs classes</span>
+
+<div style="display:flex; gap:40px; align-items:flex-start; font-family:sans-serif;">
+  <div>
+
+  <!-- Colonne gauche : sliders -->
+<span style="font-size:18px;font-weight:bold">Paramètres :</span><br>
+<span style="font-size:18px;font-style:italic">Taille de la grille :</span>
+```{ojs}
+viewof gridSize3 = (() => {
+  const slider = Inputs.range([5, 100], {value: 20, step: 1})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de points :</span>
+```{ojs}
+viewof numPoints3 = (() => {
+  const slider = Inputs.range([10, 5000], {value: 500, step: 10})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de cases sélectionnées :</span>
+```{ojs}
+viewof k3 = (() => {
+  const slider = Inputs.range([1, gridSize3 * gridSize3], {value: 60, step: 1})
+  slider.style.width = "250px"
+  slider.style.fontSize = "20px"
+  return slider
+})()
+```
+
+-------------------
+
+<span style="font-size:18px;font-style:italic">Choix de la répartition des points :</span>
+```{ojs}
+viewof choix_repartition_points3 = Inputs.select(
+  [
+    "Uniforme",
+    "Ondulations croisées régulières",
+    "Ondulations croisées irrégulières",
+    "Ondulations sinusoïdales",
+    "Concentration centrale",
+    "Motif en cercles concentriques ou anneaux"
+  ],
+  { value: "Uniforme"}
+)
+```
+
+<style>
+  select, select option {
+    font-size: 20px !important;   /* taille des options */
+  }
+</style>
+  </div>
+
+  <!-- Colonne droite : grille -->
+  <div id="grid-container">
+```{ojs}
+{
+  const totalCells = gridSize3 * gridSize3
+
+  // -------------------
+  // PARAMETRES COULEURS
+  // -------------------
+  const colors = ["red", "green", "orange"]
+  const names = ["Rouge", "Vert", "Orange"]
+
+  // -------------------
+  // POINTS
+  // -------------------
+  const points = []
+
+  let density = null
+  if (choix_repartition_points3 === "Ondulations croisées régulières") {
+    density = (x, y) => Math.abs(Math.sin(x * 0.5) * Math.cos(y * 0.5) + Math.sin(x * 0.2 + y * 0.3))
+  } else if (choix_repartition_points3 === "Ondulations croisées irrégulières") {
+    density = (x, y) => Math.cos(x * 0.3) * Math.sin(y * 0.7) + Math.cos(x * 0.1 + y * 0.2)
+  } else if (choix_repartition_points3 === "Ondulations sinusoïdales") {
+    density = (x, y) => Math.abs(Math.sin(x * 0.5) * Math.cos(y * 0.5) + Math.sin(x * 0.2 + y * 0.3))
+  } else if (choix_repartition_points3 === "Concentration centrale") {
+    density = (x, y) => {
+      const cx = gridSize3 / 2
+      const cy = gridSize3 / 2
+      const sigma = gridSize3 / 5
+      return Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * sigma ** 2))
+    }
+  } else if (choix_repartition_points3 === "Anneaux") {
+    density = (x, y) => {
+      const cx = gridSize3 / 2
+      const cy = gridSize3 / 2
+      const r = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+      return 0.5 + 0.5 * Math.sin(r * 0.5)
+    }
+  }
+
+  function randomType() {
+    return Math.floor(Math.random() * 3)
+  }
+
+  if (choix_repartition_points3 === "Uniforme") {
+    for (let i = 0; i < numPoints3; i++) {
+      points.push({
+        x: Math.random() * gridSize3,
+        y: Math.random() * gridSize3,
+        type: randomType()
+      })
+    }
+  } else {
+    while (points.length < numPoints3) {
+      const x = Math.random() * gridSize3
+      const y = Math.random() * gridSize3
+      if (Math.random() < density(x, y) / 2) {
+        points.push({ x, y, type: randomType() })
+      }
+    }
+  }
+
+  // -------------------
+  // CASES
+  // -------------------
+  const selectedCells = new Set()
+  while (selectedCells.size < k3) {
+    const x = Math.floor(Math.random() * gridSize3)
+    const y = Math.floor(Math.random() * gridSize3)
+    selectedCells.add(`${x},${y}`)
+  }
+
+  function isSelected(p) {
+    return selectedCells.has(`${Math.floor(p.x)},${Math.floor(p.y)}`)
+  }
+
+  // -------------------
+  // COMPTAGE
+  // -------------------
+  const counts = [0, 0, 0]
+  const capturedCounts = [0, 0, 0]
+
+  for (const p of points) {
+    counts[p.type]++
+    if (isSelected(p)) capturedCounts[p.type]++
+  }
+
+  // estimations
+  const estimatedCounts = capturedCounts.map(c => (c / k3) * totalCells)
+
+  // erreurs
+  const errors = estimatedCounts.map((est, i) => Math.abs(est - counts[i]))
+  const errorPercents = errors.map((e, i) => (counts[i] > 0 ? (e / counts[i]) * 100 : 0))
+
+  // -------------------
+  // SVG
+  // -------------------
+  const svgNS = "http://www.w3.org/2000/svg"
+  const svg = document.createElementNS(svgNS, "svg")
+
+  svg.setAttribute("viewBox", `0 0 ${gridSize3} ${gridSize3}`)
+  svg.setAttribute("width", 500)
+  svg.setAttribute("height", 500)
+  svg.style.border = "1px solid black"
+
+  // grille
+  for (let i = 0; i <= gridSize3; i++) {
+    const h = document.createElementNS(svgNS, "line")
+    h.setAttribute("x1", 0)
+    h.setAttribute("y1", i)
+    h.setAttribute("x2", gridSize3)
+    h.setAttribute("y2", i)
+    h.setAttribute("stroke", "#888")
+    h.setAttribute("stroke-width", 0.02)
+    svg.appendChild(h)
+
+    const v = document.createElementNS(svgNS, "line")
+    v.setAttribute("x1", i)
+    v.setAttribute("y1", 0)
+    v.setAttribute("x2", i)
+    v.setAttribute("y2", gridSize3)
+    v.setAttribute("stroke", "#888")
+    v.setAttribute("stroke-width", 0.02)
+    svg.appendChild(v)
+  }
+
+  // cases
+  for (const cell of selectedCells) {
+    const [x, y] = cell.split(",").map(Number)
+    const rect = document.createElementNS(svgNS, "rect")
+    rect.setAttribute("x", x)
+    rect.setAttribute("y", y)
+    rect.setAttribute("width", 1)
+    rect.setAttribute("height", 1)
+    rect.setAttribute("fill", "blue")
+    rect.setAttribute("opacity", 0.2)
+    svg.appendChild(rect)
+  }
+
+  // points TOUS colorés
+  for (const p of points) {
+    const c = document.createElementNS(svgNS, "circle")
+    c.setAttribute("cx", p.x)
+    c.setAttribute("cy", p.y)
+    c.setAttribute("r", 0.1)
+    c.setAttribute("fill", colors[p.type])
+    svg.appendChild(c)
+  }
+
+  // -------------------
+  // TEXTE
+  // -------------------
+  const text = document.createElement("div")
+  text.style.fontSize = "12px"
+  text.style.margin = "10px 0"
+
+  let html = `<br><br><br><br><b>Population totale :</b> ${numPoints3}<br><br>`
+
+  for (let i = 0; i < 3; i++) {
+    html += `
+      <b style="color:${colors[i]}">${names[i]}</b><br>
+      Total réel : ${counts[i]}<br>
+      Capturés : ${capturedCounts[i]}<br>
+      Proportion capturée : ${(capturedCounts[i] / Math.max(1, k3)).toFixed(3)}<br>
+      Estimation : ${Math.round(estimatedCounts[i])}<br>
+      Erreur relative : ${errorPercents[i].toFixed(2)} %<br><br>
+    `
+  }
+  
+  const container = document.createElement("div")
+  container.style.display = "flex"
+  container.style.flexDirection = "row"
+  container.style.alignItems = "flex-start"
+  container.style.gap = "12px"
+  
+  // colonne gauche (texte)
+  const leftCol = document.createElement("div")
+  leftCol.style.display = "flex"
+  leftCol.style.flexDirection = "column"
+  leftCol.style.flex = "1"       
+  leftCol.style.maxWidth = "none" 
+  leftCol.style.minWidth = "200px"
+  
+  text.innerHTML = html
+  leftCol.appendChild(text)
+  
+  // colonne droite (grille)
+  const rightCol = document.createElement("div")
+  rightCol.style.flexShrink = "0"
+  rightCol.style.width = "520px" // ou 500 selon ton svg
+  rightCol.appendChild(svg)
+  
+  // assemblage
+  container.appendChild(leftCol)
+  container.appendChild(rightCol)
+  
+  return container
+}
+```
+  </div>
+</div>
+
+
+<!-- /////////////////////////////////////////////////////////////////////// -->
+<!-- //////////////////////////////////////////////////////////////////////  -->
+
+
+## <span style="font-size:36px;">Simulation de tirages personnalisés à plusieurs classes</span> 
+
+<div style="display:flex; gap:50px; align-items:flex-start; font-family:sans-serif;">
+  <div>
+  <!-- Colonne gauche : sliders -->
+<span style="font-size:18px;font-weight:bold">Paramètres :</span><br>
+<span style="font-size:18px;font-style:italic">Taille de la grille :</span>
+```{ojs}
+viewof gridSize4 = (() => {
+  const slider = Inputs.range([5, 100], {value: 20, step: 1})
+  slider.style.width = "250px"    
+  slider.style.fontSize = "20px"  
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de points :</span>
+```{ojs}
+viewof numPoints4 = (() => {
+  const slider = Inputs.range([10, 5000], {value: 500, step: 10}) 
+  slider.style.width = "250px"    
+  slider.style.fontSize = "20px"  
+  return slider
+})()
+```
+
+<span style="font-size:18px;font-style:italic">Nombre de cases sélectionnées :</span>
+```{ojs}
+viewof k4 = (() => {
+  const slider = Inputs.range([1, gridSize4 * gridSize4], {value: 60, step: 1})
+  slider.style.width = "250px"    
+  slider.style.fontSize = "20px" 
+  return slider
+})()
+```
+-------------------------------------------------------------------------
+<span style="font-size:18px;font-style:italic">Choix de la répartition des points :</span>
+```{ojs}
+viewof choix_repartition_points4 = Inputs.select(
+  [
+    "Uniforme",
+    "Ondulations croisées régulières",
+    "Ondulations croisées irrégulières",
+    "Ondulations sinusoïdales",
+    "Concentration centrale",
+    "Motif en cercles concentriques ou anneaux"
+  ],
+  { value: "Uniforme"}
+)
+```
+
+<style>
+  select, select option {
+    font-size: 20px !important;   /* taille des options */
+  }
+</style>
+
+  </div>
+  
+  <!-- Colonne droite : grille -->
+  <div id="grid-container">
+  
+```{ojs}
+mutable selectedCells2 = new Set()
+```
+  
+```{ojs}
+mutable points2 = (function() {
+  const points2 = []
+
+  function randomType() {
+    return Math.floor(Math.random() * 3)
+  }
+
+  let density = null
+  if (choix_repartition_points4 === "Ondulations croisées régulières") {
+    density = (x, y) => Math.abs(Math.sin(x * 0.5) * Math.cos(y * 0.5) + Math.sin(x * 0.2 + y * 0.3))
+  } else if (choix_repartition_points4 === "Ondulations croisées irrégulières") {
+    density = (x, y) => Math.cos(x * 0.3) * Math.sin(y * 0.7) + Math.cos(x * 0.1 + y * 0.2)
+  } else if (choix_repartition_points4 === "Concentration centrale") {
+    density = (x, y) => {
+      const cx = gridSize4 / 2
+      const cy = gridSize4 / 2
+      const sigma = gridSize4 / 5
+      return Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * sigma ** 2))
+    }
+  } else if (choix_repartition_points4 === "Motif en cercles concentriques ou anneaux") {
+    density = (x, y) => {
+      const cx = gridSize4 / 2
+      const cy = gridSize4 / 2
+      const r = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+      return 0.5 + 0.5 * Math.sin(r * 0.5)
+    }
+  }
+
+  if (choix_repartition_points4 === "Uniforme") {
+    for (let i = 0; i < numPoints4; i++) {
+      points2.push({
+        x: Math.random() * gridSize4,
+        y: Math.random() * gridSize4,
+        type: randomType()
+      })
+    }
+  } else {
+    while (points2.length < numPoints4) {
+      const x = Math.random() * gridSize4
+      const y = Math.random() * gridSize4
+      if (Math.random() < density(x, y) / 2) {
+        points2.push({ x, y, type: randomType() })
+      }
+    }
+  }
+
+  return points2
+})()
+```
+  
+```{ojs}
+{
+  const svgNS = "http://www.w3.org/2000/svg"
+  const colors = ["red", "green", "orange"]
+
+  const svg = document.createElementNS(svgNS, "svg")
+  svg.setAttribute("viewBox", `0 0 ${gridSize4} ${gridSize4}`)
+  svg.setAttribute("width", 500)
+  svg.setAttribute("height", 500)
+  svg.style.border = "1px solid black"
+  svg.style.cursor = "crosshair"
+
+  let dragging = false
+  let addMode = true
+
+  function processCell(x, y) {
+    const key = `${x},${y}`
+    const next = new Set(mutable selectedCells2)
+
+    if (next.has(key)) {
+      if (!addMode) next.delete(key)
+    } else {
+      if (addMode) {
+        if (next.size >= k4) {
+          const first = next.values().next().value
+          next.delete(first)
+        }
+        next.add(key)
+      }
+    }
+
+    mutable selectedCells2 = next
+    updateDisplay()
+  }
+
+  function getMouseCell(e) {
+    const rect = svg.getBoundingClientRect()
+    const x = Math.floor((e.clientX - rect.left) / rect.width * gridSize4)
+    const y = Math.floor((e.clientY - rect.top) / rect.height * gridSize4)
+    return [x, y]
+  }
+
+  svg.addEventListener("mousedown", e => {
+    dragging = true
+    const [x, y] = getMouseCell(e)
+    addMode = !mutable selectedCells2.has(`${x},${y}`)
+    processCell(x, y)
+  })
+
+  svg.addEventListener("mousemove", e => {
+    if (!dragging) return
+    const [x, y] = getMouseCell(e)
+    processCell(x, y)
+  })
+
+  svg.addEventListener("mouseup", () => dragging = false)
+  svg.addEventListener("mouseleave", () => dragging = false)
+
+  // grille
+  for (let i = 0; i <= gridSize4; i++) {
+    const h = document.createElementNS(svgNS, "line")
+    h.setAttribute("x1", 0)
+    h.setAttribute("y1", i)
+    h.setAttribute("x2", gridSize4)
+    h.setAttribute("y2", i)
+    h.setAttribute("stroke", "#555")
+    h.setAttribute("stroke-width", 0.05)
+    svg.appendChild(h)
+
+    const v = document.createElementNS(svgNS, "line")
+    v.setAttribute("x1", i)
+    v.setAttribute("y1", 0)
+    v.setAttribute("x2", i)
+    v.setAttribute("y2", gridSize4)
+    v.setAttribute("stroke", "#555")
+    v.setAttribute("stroke-width", 0.05)
+    svg.appendChild(v)
+  }
+
+  const caseRects = []
+  const pointCircles = []
+
+  // points (toujours colorés)
+  for (const p of mutable points2) {
+    const c = document.createElementNS(svgNS, "circle")
+    c.setAttribute("cx", p.x)
+    c.setAttribute("cy", p.y)
+    c.setAttribute("r", 0.1)
+    c.setAttribute("fill", colors[p.type])
+    svg.appendChild(c)
+    pointCircles.push(c)
+  }
+
+  function updateDisplay() {
+    // cases
+    caseRects.forEach(r => svg.removeChild(r))
+    caseRects.length = 0
+
+    for (const cell of mutable selectedCells2) {
+      const [x, y] = cell.split(",").map(Number)
+      const rect = document.createElementNS(svgNS, "rect")
+      rect.setAttribute("x", x)
+      rect.setAttribute("y", y)
+      rect.setAttribute("width", 1)
+      rect.setAttribute("height", 1)
+      rect.setAttribute("fill", "blue")
+      rect.setAttribute("opacity", 0.3)
+      svg.appendChild(rect)
+      caseRects.push(rect)
+    }
+
+    // stats
+    const counts = [0, 0, 0]
+    const capturedCounts = [0, 0, 0]
+
+    for (const p of mutable points2) {
+      counts[p.type]++
+      if (mutable selectedCells2.has(`${Math.floor(p.x)},${Math.floor(p.y)}`)) {
+        capturedCounts[p.type]++
+      }
+    }
+
+    const totalCells = gridSize4 * gridSize4
+
+    const estimated = capturedCounts.map(c =>
+      (c / Math.max(1, mutable selectedCells2.size)) * totalCells
+    )
+
+    const errors = estimated.map((e, i) => Math.abs(e - counts[i]))
+    const errorPercents = errors.map((e, i) =>
+      counts[i] > 0 ? (e / counts[i]) * 100 : 0
+    )
+
+    const names = ["Rouge", "Vert", "Orange"]
+
+    let html = `<br><br><br><br><b>Cases sélectionnées :</b> ${mutable selectedCells2.size} / ${k4}<br><br>
+                <b>Population totale :</b> ${numPoints4}<br><br>`
+    
+    for (let i = 0; i < 3; i++) {
+      html += `
+        <b style="color:${colors[i]}">${names[i]}</b><br>
+        Total réel : ${counts[i]}<br>
+        Capturés : ${capturedCounts[i]}<br>
+        Proportion capturée : ${(capturedCounts[i] / Math.max(1, mutable selectedCells2.size)).toFixed(3)}<br>
+        Estimation : ${Math.round(estimated[i])}<br>
+        Erreur relative : ${errorPercents[i].toFixed(2)} %<br><br>
+      `
+    }
+
+    estimatedDiv.innerHTML = html
+  }
+
+  // layout
+  const container = document.createElement("div")
+  container.style.display = "flex"
+  container.style.flexDirection = "row"
+  container.style.gap = "20px"
+  container.style.fontFamily = "sans-serif"
+  container.style.fontSize = "12px"
+  container.style.alignItems = "flex-start"
+
+  const leftCol = document.createElement("div")
+  leftCol.style.flex = "2"
+  leftCol.style.minWidth = "200px"
+
+  const estimatedDiv = document.createElement("div")
+
+  const resetBtn = document.createElement("button")
+  resetBtn.textContent = "Reset"
+  resetBtn.onclick = () => {
+    mutable selectedCells2 = new Set()
+    updateDisplay()
+  }
+
+  leftCol.appendChild(estimatedDiv)
+  leftCol.appendChild(resetBtn)
+
+  container.appendChild(leftCol)
+  container.appendChild(svg)
+
+  updateDisplay()
+
+  return container
+}
+```
+
+  </div>
+</div>
